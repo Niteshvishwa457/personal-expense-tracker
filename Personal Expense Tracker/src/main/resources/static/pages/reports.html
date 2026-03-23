@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports - Personal Expense Tracker</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-wallet"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 1 0-2 0v1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>
+                PET Tracker
+            </div>
+            <nav>
+                <ul class="nav-links">
+                    <li><a href="/pages/dashboard.html">Dashboard</a></li>
+                    <li><a href="/pages/transactions.html">Transactions</a></li>
+                    <li><a href="/pages/reports.html" class="active">Reports</a></li>
+                </ul>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="btn btn-secondary" style="margin-top:0" onclick="auth.logout()">Logout</button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="header">
+                <div>
+                    <h1 style="margin:0">Financial Reports</h1>
+                    <p class="text-muted">Analyze your monthly spending and earnings.</p>
+                </div>
+                <div class="user-profile" style="display:flex; gap:12px">
+                    <div style="display:flex; gap:8px">
+                        <select id="reportMonth" class="form-group" style="margin:0; width:120px">
+                            <option value="1">January</option>
+                            <option value="2">February</option>
+                            <option value="3">March</option>
+                            <option value="4">April</option>
+                            <option value="5">May</option>
+                            <option value="6">June</option>
+                            <option value="7">July</option>
+                            <option value="8">August</option>
+                            <option value="9">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                        <select id="reportYear" class="form-group" style="margin:0; width:100px">
+                            <option value="2024">2024</option>
+                            <option value="2025">2025</option>
+                            <option value="2026">2026</option>
+                        </select>
+                    </div>
+                    <button class="btn" style="width:auto; padding: 10px 20px" onclick="loadReport()">Generate</button>
+                    <button class="btn btn-secondary" style="width:auto; padding: 10px 20px" onclick="exportPdf()">Export PDF</button>
+                </div>
+            </header>
+
+            <div class="stats-grid">
+                <div class="card">
+                    <div class="card-title">Monthly Income</div>
+                    <div class="card-value income" id="totalIncome">$0.00</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Monthly Expenses</div>
+                    <div class="card-value expense" id="totalExpenses">$0.00</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Net Savings</div>
+                    <div class="card-value balance" id="totalBalance">$0.00</div>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="card chart-card">
+                    <div class="card-title">Spending by Category</div>
+                    <canvas id="categoryChart"></canvas>
+                </div>
+                <div class="card">
+                    <div class="card-title">Category Breakdown</div>
+                    <div id="categoryBreakdown" style="margin-top:20px">
+                        <!-- Categories will be listed here -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script>
+        const now = new Date();
+        document.getElementById('reportMonth').value = now.getMonth() + 1;
+        document.getElementById('reportYear').value = now.getFullYear();
+
+        let currentChart = null;
+
+        async function loadReport() {
+            const m = document.getElementById('reportMonth').value;
+            const y = document.getElementById('reportYear').value;
+
+            try {
+                const report = await apiCall(`/reports/monthly?month=${m}&year=${y}`);
+                
+                document.getElementById('totalIncome').innerText = `$${report.totalIncome.toFixed(2)}`;
+                document.getElementById('totalExpenses').innerText = `$${report.totalExpenses.toFixed(2)}`;
+                document.getElementById('totalBalance').innerText = `$${report.balance.toFixed(2)}`;
+
+                renderCategoryChart(report.categoryExpenses);
+                renderCategoryList(report.categoryExpenses, report.totalExpenses);
+            } catch (err) {
+                console.error(err);
+                alert('Failed to load report.');
+            }
+        }
+
+        function renderCategoryChart(categories) {
+            const ctx = document.getElementById('categoryChart').getContext('2d');
+            
+            if (currentChart) currentChart.destroy();
+
+            const names = Object.keys(categories);
+            const values = Object.values(categories);
+
+            currentChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: names,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7', '#ec4899', '#64748b'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right' }
+                    }
+                }
+            });
+        }
+
+        function renderCategoryList(categories, total) {
+            const container = document.getElementById('categoryBreakdown');
+            if (total === 0) {
+                container.innerHTML = '<p class="text-muted">No expenses recorded for this month.</p>';
+                return;
+            }
+
+            container.innerHTML = Object.entries(categories).map(([name, val]) => {
+                const percent = ((val / total) * 100).toFixed(1);
+                return `
+                    <div style="margin-bottom: 20px">
+                        <div style="display:flex; justify-content:space-between; margin-bottom: 8px">
+                            <span style="font-weight:600">${name}</span>
+                            <span class="text-muted">$${val.toFixed(2)} (${percent}%)</span>
+                        </div>
+                        <div style="height: 8px; width: 100%; background: var(--bg-main); border-radius: 4px; overflow:hidden">
+                            <div style="height:100%; width: ${percent}%; background: var(--primary); border-radius: 4px"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function exportPdf() {
+            const m = document.getElementById('reportMonth').value;
+            const y = document.getElementById('reportYear').value;
+            
+            try {
+                const blob = await apiCall(`/reports/export/pdf?month=${m}&year=${y}`, 'GET', null, true);
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `report_${m}_${y}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } catch (err) {
+                console.error(err);
+                alert('Failed to export PDF.');
+            }
+        }
+
+        loadReport();
+    </script>
+</body>
+</html>

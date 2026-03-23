@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Personal Expense Tracker</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-wallet"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 1 0-2 0v1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>
+                PET Tracker
+            </div>
+            <nav>
+                <ul class="nav-links">
+                    <li><a href="/pages/dashboard.html" class="active">Dashboard</a></li>
+                    <li><a href="/pages/transactions.html">Transactions</a></li>
+                    <li><a href="/pages/reports.html">Reports</a></li>
+                </ul>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="btn btn-secondary" style="margin-top:0" onclick="auth.logout()">Logout</button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="header">
+                <div>
+                    <h1 style="margin:0">Dashboard</h1>
+                    <p class="text-muted">Welcome back, <span id="userName">User</span>!</p>
+                </div>
+                <div class="user-profile">
+                    <button class="btn" style="width:auto; padding: 10px 20px" onclick="window.location.href='/pages/transactions.html?add=true'">+ Add Transaction</button>
+                </div>
+            </header>
+
+            <div class="stats-grid">
+                <div class="card fade-in" style="animation-delay: 0.1s">
+                    <div class="card-title">Total Balance</div>
+                    <div class="card-value balance" id="totalBalance">$0.00</div>
+                </div>
+                <div class="card fade-in" style="animation-delay: 0.2s">
+                    <div class="card-title">Monthly Income</div>
+                    <div class="card-value income" id="totalIncome">$0.00</div>
+                </div>
+                <div class="card fade-in" style="animation-delay: 0.3s">
+                    <div class="card-title">Monthly Expenses</div>
+                    <div class="card-value expense" id="totalExpenses">$0.00</div>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="card chart-card fade-in" style="animation-delay: 0.4s">
+                    <div class="card-title">Expense Summary</div>
+                    <canvas id="expenseChart"></canvas>
+                </div>
+                <div class="card chart-card fade-in" style="animation-delay: 0.5s">
+                    <div class="card-title">Income vs Expenses</div>
+                    <canvas id="incomeVsExpenseChart"></canvas>
+                </div>
+            </div>
+
+            <h2 style="margin-top:40px">Recent Transactions</h2>
+            <div class="table-container fade-in" style="animation-delay: 0.6s">
+                <table id="recentTransactionsTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Category</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Transactions will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script>
+        document.getElementById('userName').innerText = auth.getUser().username;
+
+        async function loadDashboard() {
+            try {
+                const now = new Date();
+                const month = now.getMonth() + 1;
+                const year = now.getFullYear();
+
+                const [report, transactions] = await Promise.all([
+                    apiCall(`/reports/monthly?month=${month}&year=${year}`),
+                    apiCall('/transactions')
+                ]);
+
+                // Update Stats
+                document.getElementById('totalBalance').innerText = `$${report.balance.toFixed(2)}`;
+                document.getElementById('totalIncome').innerText = `$${report.totalIncome.toFixed(2)}`;
+                document.getElementById('totalExpenses').innerText = `$${report.totalExpenses.toFixed(2)}`;
+
+                // Update Recent Transactions
+                const tableBody = document.querySelector('#recentTransactionsTable tbody');
+                tableBody.innerHTML = transactions.slice(0, 5).map(t => `
+                    <tr>
+                        <td>${t.transactionDate}</td>
+                        <td>${t.description || '-'}</td>
+                        <td>${t.categoryName}</td>
+                        <td><span class="badge ${t.type.toLowerCase()}">${t.type}</span></td>
+                        <td style="font-weight:600; color: ${t.type === 'INCOME' ? 'var(--secondary)' : 'var(--danger)'}">${t.type === 'INCOME' ? '+' : '-'}$${t.amount.toFixed(2)}</td>
+                    </tr>
+                `).join('');
+
+                // Render Charts
+                renderCharts(report);
+            } catch (err) {
+                console.error(err);
+                alert('Failed to load dashboard data.');
+            }
+        }
+
+        function renderCharts(report) {
+            // Expense by category chart
+            const categoryNames = Object.keys(report.categoryExpenses);
+            const categoryData = Object.values(report.categoryExpenses);
+
+            new Chart(document.getElementById('expenseChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: categoryNames,
+                    datasets: [{
+                        data: categoryData,
+                        backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7', '#ec4899', '#64748b'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+
+            // Income vs Expense bar chart
+            new Chart(document.getElementById('incomeVsExpenseChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['Income', 'Expenses'],
+                    datasets: [{
+                        label: 'Amount ($)',
+                        data: [report.totalIncome, report.totalExpenses],
+                        backgroundColor: ['#10b981', '#ef4444'],
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        loadDashboard();
+    </script>
+</body>
+</html>

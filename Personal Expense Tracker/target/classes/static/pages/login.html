@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Personal Expense Tracker</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="auth-container">
+    <div class="auth-card fade-in">
+        <h2>Welcome Back</h2>
+        <p>Enter your credentials to access your tracker.</p>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" placeholder="e.g. ashish_pk" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn">Login</button>
+            <button type="button" class="btn btn-secondary" onclick="window.location.href='/pages/signup.html'">Create an account</button>
+        </form>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('http://localhost:8082/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    auth.setToken(data.jwttoken);
+                    auth.setUser({ username: data.username, email: data.email });
+                    window.location.href = '/pages/dashboard.html';
+                } else {
+                    const data = await response.json().catch(() => ({}));
+                    alert('Login failed: ' + (data.message || 'Status ' + response.status));
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Connection error. Is the backend running?');
+            }
+        });
+    </script>
+</body>
+</html>

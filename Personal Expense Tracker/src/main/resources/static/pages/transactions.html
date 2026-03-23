@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transactions - Personal Expense Tracker</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-wallet"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 1 0-2 0v1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>
+                PET Tracker
+            </div>
+            <nav>
+                <ul class="nav-links">
+                    <li><a href="/pages/dashboard.html">Dashboard</a></li>
+                    <li><a href="/pages/transactions.html" class="active">Transactions</a></li>
+                    <li><a href="/pages/reports.html">Reports</a></li>
+                </ul>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="btn btn-secondary" style="margin-top:0" onclick="auth.logout()">Logout</button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="header">
+                <div>
+                    <h1 style="margin:0">Transactions</h1>
+                    <p class="text-muted">Manage your daily income and expenses.</p>
+                </div>
+                <div class="user-profile">
+                    <button class="btn" style="width:auto; padding: 10px 20px" onclick="toggleModal(true)">+ Add New</button>
+                </div>
+            </header>
+
+            <div class="card fade-in" style="margin-bottom: 24px">
+                <div class="card-title">Filter Transactions</div>
+                <form id="filterForm" style="display: flex; gap: 16px; align-items: flex-end">
+                    <div class="form-group" style="margin:0; flex:1">
+                        <label>Start Date</label>
+                        <input type="date" id="filterStart">
+                    </div>
+                    <div class="form-group" style="margin:0; flex:1">
+                        <label>End Date</label>
+                        <input type="date" id="filterEnd">
+                    </div>
+                    <div class="form-group" style="margin:0; flex:1">
+                        <label>Category</label>
+                        <select id="filterCategory">
+                            <option value="">All Categories</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn" style="width:auto; padding: 12px 30px">Filter</button>
+                    <button type="button" class="btn btn-secondary" onclick="resetFilters()" style="width:auto; padding: 12px 20px">Reset</button>
+                </form>
+            </div>
+
+            <div class="table-container fade-in">
+                <table id="transactionsTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Category</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Transactions will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div id="transactionModal" class="auth-container" style="display:none; position:fixed; top:0; left:0; width:100%; z-index:1000; background:rgba(0,0,0,0.5); backdrop-filter:blur(5px);">
+        <div class="auth-card fade-in" style="max-width:500px">
+            <h2 id="modalTitle">Add Transaction</h2>
+            <form id="transactionForm">
+                <input type="hidden" id="transactionId">
+                <div class="form-group">
+                    <label>Amount</label>
+                    <input type="number" step="0.01" id="amount" placeholder="0.00" required>
+                </div>
+                <div class="form-group">
+                    <label>Type</label>
+                    <select id="type" required>
+                        <option value="EXPENSE">Expense</option>
+                        <option value="INCOME">Income</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="categoryName" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" id="transactionDate" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="description" rows="3" placeholder="Lunch at Olive Garden..."></textarea>
+                </div>
+                <div style="display:flex; gap:12px">
+                    <button type="submit" class="btn">Save</button>
+                    <button type="button" class="btn btn-secondary" onclick="toggleModal(false)">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script>
+        let categories = [];
+
+        async function init() {
+            try {
+                categories = await apiCall('/categories');
+                populateCategories();
+                loadTransactions();
+                
+                // If query param 'add=true' exists, open modal
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('add') === 'true') toggleModal(true);
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function populateCategories() {
+            const dropdowns = [document.getElementById('filterCategory'), document.getElementById('categoryName')];
+            categories.forEach(cat => {
+                dropdowns.forEach(dd => {
+                    const opt = document.createElement('option');
+                    opt.value = cat;
+                    opt.innerText = cat;
+                    dd.appendChild(opt);
+                });
+            });
+        }
+
+        async function loadTransactions(filters = {}) {
+            try {
+                let query = '';
+                if (filters.start || filters.end || filters.category) {
+                    query = '/filter?';
+                    if (filters.start) query += `startDate=${filters.start}&`;
+                    if (filters.end) query += `endDate=${filters.end}&`;
+                    if (filters.category) query += `categoryName=${filters.category}&`;
+                }
+                const data = await apiCall(`/transactions${query}`);
+                
+                const tableBody = document.querySelector('#transactionsTable tbody');
+                tableBody.innerHTML = data.map(t => `
+                    <tr>
+                        <td>${t.transactionDate}</td>
+                        <td>${t.description || '-'}</td>
+                        <td>${t.categoryName}</td>
+                        <td><span class="badge ${t.type.toLowerCase()}">${t.type}</span></td>
+                        <td style="font-weight:600; color: ${t.type === 'INCOME' ? 'var(--secondary)' : 'var(--danger)'}">
+                            ${t.type === 'INCOME' ? '+' : '-'}$${t.amount.toFixed(2)}
+                        </td>
+                        <td>
+                            <button class="btn btn-secondary" style="width:auto; padding: 4px 10px; font-size: 0.8rem" onclick="editTransaction(${JSON.stringify(t).replace(/"/g, '&quot;')})">Edit</button>
+                            <button class="btn btn-secondary" style="width:auto; padding: 4px 10px; font-size: 0.8rem; border-color: var(--danger); color: var(--danger)" onclick="deleteTransaction(${t.transactionId})">Delete</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function toggleModal(show) {
+            document.getElementById('transactionModal').style.display = show ? 'flex' : 'none';
+            if (!show) {
+                document.getElementById('transactionForm').reset();
+                document.getElementById('transactionId').value = '';
+                document.getElementById('modalTitle').innerText = 'Add Transaction';
+            } else {
+                document.getElementById('transactionDate').valueAsDate = new Date();
+            }
+        }
+
+        function editTransaction(t) {
+            document.getElementById('modalTitle').innerText = 'Edit Transaction';
+            document.getElementById('transactionId').value = t.transactionId;
+            document.getElementById('amount').value = t.amount;
+            document.getElementById('type').value = t.type;
+            document.getElementById('categoryName').value = t.categoryName;
+            document.getElementById('transactionDate').value = t.transactionDate;
+            document.getElementById('description').value = t.description;
+            toggleModal(true);
+        }
+
+        async function deleteTransaction(id) {
+            if (confirm('Are you sure you want to delete this transaction?')) {
+                try {
+                    await apiCall(`/transactions/${id}`, 'DELETE');
+                    loadTransactions();
+                } catch (err) {
+                    alert(err.message);
+                }
+            }
+        }
+
+        document.getElementById('transactionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('transactionId').value;
+            const data = {
+                amount: document.getElementById('amount').value,
+                type: document.getElementById('type').value,
+                categoryName: document.getElementById('categoryName').value,
+                transactionDate: document.getElementById('transactionDate').value,
+                description: document.getElementById('description').value
+            };
+
+            try {
+                if (id) {
+                    await apiCall(`/transactions/${id}`, 'PUT', data);
+                } else {
+                    await apiCall('/transactions', 'POST', data);
+                }
+                toggleModal(false);
+                loadTransactions();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+
+        document.getElementById('filterForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            loadTransactions({
+                start: document.getElementById('filterStart').value,
+                end: document.getElementById('filterEnd').value,
+                category: document.getElementById('filterCategory').value
+            });
+        });
+
+        function resetFilters() {
+            document.getElementById('filterForm').reset();
+            loadTransactions();
+        }
+
+        init();
+    </script>
+</body>
+</html>
